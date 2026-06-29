@@ -1,102 +1,58 @@
 -- =====================================================================
---  VitalHub · Controle de Caixa — Esquema do banco (Supabase / PostgreSQL)
---  Rode no Supabase: Dashboard > SQL Editor > New query > cole tudo > Run.
---  Cada usuário só enxerga/edita os próprios dados (RLS por auth.uid()).
---  IDs são TEXTO (gerados pelo app) e os valores monetários ficam em CENTAVOS.
+--  seed.sql — dados de exemplo da VitalHub para o USUÁRIO LOGADO
+--  Rode DEPOIS do schema.sql e DEPOIS de criar/entrar com o usuário.
+--  Como usa auth.uid(), execute pelo app já logado OU rode no SQL Editor
+--  e troque auth.uid() pelo id do usuário (Authentication > Users > copiar UID).
+--  Valores em CENTAVOS.
 -- =====================================================================
-
-create table if not exists public.contas (
-  id            text primary key,
-  owner         uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  nome          text not null,
-  tipo          text not null default 'Banco',
-  saldo_inicial bigint not null default 0,
-  cor           text not null default '#1f4d3a',
-  criado_em     timestamptz not null default now()
-);
-
-create table if not exists public.categorias (
-  id        text primary key,
-  owner     uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  nome      text not null,
-  tipo      text not null,
-  cor       text not null default '#2f8d59',
-  criado_em timestamptz not null default now()
-);
-
-create table if not exists public.lancamentos (
-  id           text primary key,
-  owner        uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  tipo         text not null,
-  valor        bigint not null check (valor > 0),
-  data         date not null,
-  categoria_id text references public.categorias(id) on delete set null,
-  conta_id     text references public.contas(id) on delete set null,
-  forma        text,
-  status       text not null default 'efetivado',
-  descricao    text not null default '',
-  obs          text default '',
-  criado_em    timestamptz not null default now()
-);
-
-create table if not exists public.contas_pr (
-  id           text primary key,
-  owner        uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  tipo         text not null,                  -- pagar | receber
-  descricao    text not null,
-  valor        bigint not null check (valor > 0),
-  vencimento   date not null,
-  status       text not null default 'pendente',
-  categoria_id text references public.categorias(id) on delete set null,
-  criado_em    timestamptz not null default now()
-);
-
-create table if not exists public.recorrentes (
-  id           text primary key,
-  owner        uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  tipo         text not null,
-  descricao    text not null,
-  valor        bigint not null check (valor > 0),
-  frequencia   text not null default 'Mensal',
-  proxima_data date not null,
-  categoria_id text references public.categorias(id) on delete set null,
-  criado_em    timestamptz not null default now()
-);
-
-create table if not exists public.transferencias (
-  id        text primary key,
-  owner     uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  de        text references public.contas(id) on delete set null,
-  para      text references public.contas(id) on delete set null,
-  valor     bigint not null check (valor > 0),
-  data      date not null,
-  criado_em timestamptz not null default now()
-);
-
--- ---------------- ROW LEVEL SECURITY ----------------
-alter table public.contas         enable row level security;
-alter table public.categorias     enable row level security;
-alter table public.lancamentos    enable row level security;
-alter table public.contas_pr      enable row level security;
-alter table public.recorrentes    enable row level security;
-alter table public.transferencias enable row level security;
-
-do $$
-declare t text;
-begin
-  foreach t in array array['contas','categorias','lancamentos','contas_pr','recorrentes','transferencias']
-  loop
-    execute format('drop policy if exists "owner_all" on public.%I;', t);
-    execute format('create policy "owner_all" on public.%I for all using (owner = auth.uid()) with check (owner = auth.uid());', t);
-  end loop;
-end $$;
-
--- ---------------- ÍNDICES ----------------
-create index if not exists idx_lanc_owner_data on public.lancamentos (owner, data);
-create index if not exists idx_pr_owner_venc    on public.contas_pr   (owner, vencimento);
-create index if not exists idx_rec_owner        on public.recorrentes (owner);
-
--- =====================================================================
---  CRIAR UM USUÁRIO:  Authentication > Users > Add user
---  (e-mail + senha). Com RLS ativo, ele só verá os próprios dados.
--- =====================================================================
+with
+u as (select auth.uid() as id),
+-- ---------- CONTAS ----------
+c as (
+  insert into public.contas (id, owner, nome, tipo, saldo_inicial, cor)
+  select gen_random_uuid()::text, u.id, x.nome, x.tipo, x.saldo, x.cor from u, (values
+    ('Caixa / Dinheiro','Dinheiro', 120000,'#8a8a80'),
+    ('Conta Inter PJ',  'Banco',   3500000,'#e8730a'),
+    ('Conta Nubank PJ', 'Banco',   1800000,'#8a2be2')
+  ) as x(nome,tipo,saldo,cor)
+  returning id, nome
+),
+-- ---------- CATEGORIAS ----------
+cat as (
+  insert into public.categorias (id, owner, nome, tipo, cor)
+  select gen_random_uuid()::text, u.id, x.nome, x.tipo, x.cor from u, (values
+    ('Retainers','entrada','#2f9e6f'),
+    ('Projetos','entrada','#3a86c8'),
+    ('Gestão de Tráfego','entrada','#5fb39a'),
+    ('Outras receitas','entrada','#8aa1a8'),
+    ('Salários','saida','#c23b34'),
+    ('Freelancers','saida','#e0794b'),
+    ('Ferramentas / Software','saida','#b8791f'),
+    ('Tráfego (Ads clientes)','saida','#9b6cd1'),
+    ('Aluguel','saida','#7a6f63'),
+    ('Impostos','saida','#5a6b7a'),
+    ('Operacional','saida','#a08c5b')
+  ) as x(nome,tipo,cor)
+  returning id, nome
+)
+-- ---------- LANÇAMENTOS (exemplos de junho/2026) ----------
+insert into public.lancamentos (id, owner, tipo, valor, data, categoria_id, conta_id, forma, status, descricao)
+select
+  gen_random_uuid()::text,
+  (select id from u),
+  x.tipo, x.valor, x.data::date,
+  (select id from cat where nome = x.cat),
+  (select id from c   where nome = x.conta),
+  x.forma, x.status, x.descricao
+from (values
+  ('entrada', 850000,'2026-06-02','Retainers','Conta Inter PJ','PIX','efetivado','Retainer mensal — Cliente Aurora'),
+  ('saida',   420000,'2026-06-03','Aluguel','Conta Inter PJ','Boleto','efetivado','Aluguel do escritório'),
+  ('saida',  2200000,'2026-06-05','Salários','Conta Inter PJ','Transferência','efetivado','Folha de salários — equipe'),
+  ('entrada',1200000,'2026-06-05','Projetos','Conta Nubank PJ','PIX','efetivado','Projeto branding — Cliente Bloom'),
+  ('saida',   135000,'2026-06-08','Ferramentas / Software','Conta Nubank PJ','Cartão crédito','efetivado','Adobe CC + Figma'),
+  ('entrada', 600000,'2026-06-10','Retainers','Conta Inter PJ','PIX','efetivado','Retainer mensal — Cliente Coraline'),
+  ('saida',   540000,'2026-06-12','Freelancers','Conta Inter PJ','PIX','efetivado','Freelancers — design e copy'),
+  ('entrada', 450000,'2026-06-15','Gestão de Tráfego','Conta Inter PJ','PIX','efetivado','Gestão de tráfego — Cliente Drix'),
+  ('entrada', 980000,'2026-06-20','Projetos','Conta Nubank PJ','PIX','efetivado','Projeto site — Cliente Évora'),
+  ('saida',   390000,'2026-06-22','Impostos','Conta Inter PJ','Boleto','efetivado','Simples Nacional — DAS')
+) as x(tipo,valor,data,cat,conta,forma,status,descricao);
