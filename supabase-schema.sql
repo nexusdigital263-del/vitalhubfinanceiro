@@ -1,102 +1,90 @@
--- =====================================================================
---  VitalHub · Controle de Caixa — Esquema do banco (Supabase / PostgreSQL)
---  Rode no Supabase: Dashboard > SQL Editor > New query > cole tudo > Run.
---  Cada usuário só enxerga/edita os próprios dados (RLS por auth.uid()).
---  IDs são TEXTO (gerados pelo app) e os valores monetários ficam em CENTAVOS.
--- =====================================================================
+# VitalHub · Controle de Caixa — Deploy
 
-create table if not exists public.contas (
-  id            text primary key,
-  owner         uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  nome          text not null,
-  tipo          text not null default 'Banco',
-  saldo_inicial bigint not null default 0,
-  cor           text not null default '#1f4d3a',
-  criado_em     timestamptz not null default now()
-);
+Este pacote contém tudo para publicar o sistema na **Vercel** e (opcionalmente)
+ligar um **backend real com login de usuário** via **Supabase**.
 
-create table if not exists public.categorias (
-  id        text primary key,
-  owner     uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  nome      text not null,
-  tipo      text not null,
-  cor       text not null default '#2f8d59',
-  criado_em timestamptz not null default now()
-);
+```
+deploy/
+├── index.html            ← aplicação completa, já empacotada (1 arquivo, funciona offline)
+├── vercel.json           ← configuração de hospedagem estática
+├── supabase-schema.sql   ← criação das tabelas + segurança por usuário (RLS)
+└── README.md             ← este guia
+```
 
-create table if not exists public.lancamentos (
-  id           text primary key,
-  owner        uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  tipo         text not null,
-  valor        bigint not null check (valor > 0),
-  data         date not null,
-  categoria_id text references public.categorias(id) on delete set null,
-  conta_id     text references public.contas(id) on delete set null,
-  forma        text,
-  status       text not null default 'efetivado',
-  descricao    text not null default '',
-  obs          text default '',
-  criado_em    timestamptz not null default now()
-);
+> ⚠️ **Importante:** eu gero os arquivos e a configuração, mas **não consigo
+> publicar na sua conta da Vercel nem criar contas/usuários no Supabase a partir
+> daqui** — esses passos finais (que dependem do *seu* login) estão abaixo, prontos
+> para você executar em poucos minutos.
 
-create table if not exists public.contas_pr (
-  id           text primary key,
-  owner        uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  tipo         text not null,                  -- pagar | receber
-  descricao    text not null,
-  valor        bigint not null check (valor > 0),
-  vencimento   date not null,
-  status       text not null default 'pendente',
-  categoria_id text references public.categorias(id) on delete set null,
-  criado_em    timestamptz not null default now()
-);
+---
 
-create table if not exists public.recorrentes (
-  id           text primary key,
-  owner        uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  tipo         text not null,
-  descricao    text not null,
-  valor        bigint not null check (valor > 0),
-  frequencia   text not null default 'Mensal',
-  proxima_data date not null,
-  categoria_id text references public.categorias(id) on delete set null,
-  criado_em    timestamptz not null default now()
-);
+## 1. Publicar na Vercel (hospedagem) — ~3 min
 
-create table if not exists public.transferencias (
-  id        text primary key,
-  owner     uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  de        text references public.contas(id) on delete set null,
-  para      text references public.contas(id) on delete set null,
-  valor     bigint not null check (valor > 0),
-  data      date not null,
-  criado_em timestamptz not null default now()
-);
+O `index.html` é **autossuficiente** (HTML + CSS + JS + logo já embutidos), então
+basta hospedá-lo como site estático.
 
--- ---------------- ROW LEVEL SECURITY ----------------
-alter table public.contas         enable row level security;
-alter table public.categorias     enable row level security;
-alter table public.lancamentos    enable row level security;
-alter table public.contas_pr      enable row level security;
-alter table public.recorrentes    enable row level security;
-alter table public.transferencias enable row level security;
+### Opção A — Pelo site (sem instalar nada)
+1. Acesse <https://vercel.com> e faça login.
+2. **Add New… > Project > Deploy** e arraste a pasta `deploy/` inteira
+   (ou conecte um repositório Git que contenha esses arquivos).
+3. Em *Framework Preset* escolha **Other**. Não há build — é estático.
+4. Clique em **Deploy**. Em segundos você recebe a URL pública
+   (ex.: `https://controle-vitalhub.vercel.app`).
 
-do $$
-declare t text;
-begin
-  foreach t in array array['contas','categorias','lancamentos','contas_pr','recorrentes','transferencias']
-  loop
-    execute format('drop policy if exists "owner_all" on public.%I;', t);
-    execute format('create policy "owner_all" on public.%I for all using (owner = auth.uid()) with check (owner = auth.uid());', t);
-  end loop;
-end $$;
+### Opção B — Pela CLI
+```bash
+npm i -g vercel
+cd deploy
+vercel        # responda as perguntas; aceite os padrões
+vercel --prod # publica em produção
+```
 
--- ---------------- ÍNDICES ----------------
-create index if not exists idx_lanc_owner_data on public.lancamentos (owner, data);
-create index if not exists idx_pr_owner_venc    on public.contas_pr   (owner, vencimento);
-create index if not exists idx_rec_owner        on public.recorrentes (owner);
+**Login da demonstração** (já embutido no app, sem backend):
+- e-mail: `admin@vitalhub.com`
+- senha: `vitalhub2026`
 
--- =====================================================================
---  CRIAR UM USUÁRIO:  Authentication > Users > Add user
---  (e-mail + senha). Com RLS ativo, ele só verá os próprios dados.
--- =====================================================================
+Para trocar essas credenciais da demo, edite as constantes `this.USER` / `this.PASS`
+no componente `Controle de Caixa.dc.html` e gere o `index.html` de novo.
+
+---
+
+## 2. Backend real com login de usuário (Supabase) — opcional
+
+A versão publicada acima já tem **tela de login funcional** e guarda os dados no
+navegador (localStorage). Para ter **autenticação de verdade** e **dados na nuvem
+compartilhados entre dispositivos**, use o Supabase (plano gratuito serve):
+
+1. Crie um projeto em <https://supabase.com>.
+2. **SQL Editor > New query** → cole o conteúdo de `supabase-schema.sql` → **Run**.
+   Isso cria as tabelas e a segurança por usuário (cada login vê só os próprios dados).
+3. **Authentication > Users > Add user** → crie o usuário que terá acesso
+   (ex.: `admin@vitalhub.com` + uma senha forte).
+4. **Project Settings > API** → copie a `Project URL` e a chave `anon public`.
+5. Configure-as como variáveis de ambiente na Vercel
+   (*Project > Settings > Environment Variables*):
+   ```
+   VITE_SUPABASE_URL = https://xxxx.supabase.co
+   VITE_SUPABASE_ANON_KEY = eyJ...
+   ```
+
+### Passo de integração (trabalho de desenvolvedor)
+Hoje o app lê/grava no `localStorage`. Para usar o Supabase é preciso substituir
+essa camada por chamadas ao Supabase (login via `supabase.auth.signInWithPassword`
+e CRUD via `supabase.from('lancamentos')...`). Os pontos de troca já estão isolados
+no componente:
+- **Login:** método `login()` → trocar a checagem local por `supabase.auth.signInWithPassword`.
+- **Persistência:** métodos `persist()` / `loadSaved()` → trocar por leitura/escrita nas tabelas.
+- **CRUD:** `salvar()`, `excluir()`, `darBaixa()`, etc. → emitir `insert/update/delete`.
+
+Os nomes das tabelas e colunas no `supabase-schema.sql` já correspondem ao modelo
+de dados do app (valores em centavos, `tipo`, `status`, `vencimento`, etc.), então a
+integração é direta. Posso fazer essa migração de código se você quiser — é só pedir.
+
+---
+
+## Resumo do que está pronto
+- ✅ App completo, responsivo, tema claro/escuro, com a identidade VitalHub e a logo.
+- ✅ Tela de login no padrão visual + sessão persistida.
+- ✅ Arquivo único `index.html` pronto para a Vercel.
+- ✅ `vercel.json` e esquema SQL com segurança por usuário.
+- ⏳ Conexão do app ao Supabase (auth + nuvem): requer o passo de integração acima.
