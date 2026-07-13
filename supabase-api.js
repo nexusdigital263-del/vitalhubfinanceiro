@@ -37,9 +37,9 @@ export async function sessaoAtual() {
 const TABELAS = {
   contas: "contas", categorias: "categorias", usuarios: "usuarios",
   lancamentos: "lancamentos", contasPR: "contas_pr",
-  recorrentes: "recorrentes", transferencias: "transferencias",
+  recorrentes: "recorrentes", transferencias: "transferencias", clientes: "clientes",
 };
-const APP_2_DB = { saldoInicial: "saldo_inicial", categoriaId: "categoria_id", contaId: "conta_id", proximaData: "proxima_data", ultimoAcesso: "ultimo_acesso" };
+const APP_2_DB = { saldoInicial: "saldo_inicial", categoriaId: "categoria_id", contaId: "conta_id", proximaData: "proxima_data", ultimoAcesso: "ultimo_acesso", valorMensal: "valor_mensal", diaVenc: "dia_venc" };
 const DB_2_APP = Object.fromEntries(Object.entries(APP_2_DB).map(([a, b]) => [b, a]));
 const conv = (obj, dict) => { const o = {}; for (const k in obj) o[dict[k] || k] = obj[k]; return o; };
 const paraBanco = (r) => conv(r, APP_2_DB);   // mantém o id (texto)
@@ -88,7 +88,7 @@ export async function salvarVarios(appKey, registros) {
 // Grava os dados de exemplo respeitando a ordem das chaves estrangeiras.
 // Resiliente: se uma tabela falhar (ex.: ausente no schema), segue as demais.
 export async function semear(dados) {
-  const ordem = ["contas", "categorias", "usuarios", "lancamentos", "contasPR", "recorrentes", "transferencias"];
+  const ordem = ["contas", "categorias", "usuarios", "lancamentos", "contasPR", "recorrentes", "transferencias", "clientes"];
   const erros = [];
   for (const appKey of ordem) {
     if (dados[appKey] && dados[appKey].length) {
