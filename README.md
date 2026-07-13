@@ -1,21 +1,35 @@
 # VitalHub · Controle de Caixa
 
-App de controle de caixa (estático) com login e dados na nuvem via Supabase.
+App de controle de caixa (site estático) com login real e dados na nuvem via Supabase.
 
-## Arquivos (todos na raiz — sem subpastas)
+## Arquivos (todos na RAIZ — sem subpastas, sem config.js duplicado)
 - `index.html` — a aplicação
-- `config.js` — credenciais públicas do Supabase
-- `supabase-api.js` — cliente (auth + dados)
-- `schema.sql` — rodar uma vez no Supabase (SQL Editor)
-- `seed.sql` — dados de exemplo (opcional)
+- `config.js` — credenciais públicas do Supabase (já preenchidas)
+- `supabase-api.js` — cliente (login + dados)
+- `schema.sql` — rodar UMA vez no Supabase (SQL Editor)
 
-## Publicar
-1. Suba **todos os arquivos na raiz** do repositório (não há subpastas, então não há `config.js` duplicado).
-2. Na Vercel: Add New → Project → importar o repositório → Framework **Other** → Deploy.
+## 1. Preparar o banco (uma vez)
+1. Supabase → **SQL Editor → New query** → cole todo o `schema.sql` → **Run**.
+   (ele recria as tabelas com a estrutura correta e ativa a segurança por usuário)
+2. **Authentication → Users → Add user** → crie cada login (e-mail + senha).
+3. **Authentication → Providers → Email** → desligue *Confirm email* (login imediato).
 
-## Ativar backend
-1. Supabase → SQL Editor → cole `schema.sql` → Run.
-2. Authentication → Users → criar usuário (desligar *Confirm email*).
-3. Pronto: abra o site e faça login.
+> Os **dados de exemplo** são criados automaticamente pelo app no primeiro
+> acesso de cada usuário — não precisa rodar nenhum "seed".
 
-Sem `config.js` válido o app roda em modo demonstração (login `admin@vitalhub.com` / `vitalhub2026`).
+## 2. Publicar
+1. Suba **os 4 arquivos na raiz** do repositório (não há subpastas → não aparece `config.js(1)`).
+2. Vercel → Add New → Project → importe o repositório → Framework **Other** → **Deploy**.
+3. A cada `git push`, a Vercel republica sozinha.
+
+## Como funciona
+- **Login real:** cada usuário criado no Supabase entra e vê os próprios dados.
+- **Nuvem compartilhada:** ao logar com o MESMO usuário em qualquer navegador/dispositivo,
+  os dados são os mesmos (ficam no Supabase, não no navegador).
+- **Primeiro acesso:** se o banco do usuário estiver vazio, o app popula com os
+  exemplos automaticamente.
+- Sem `config.js` válido, o app roda em modo demonstração (login `admin@vitalhub.com` / `vitalhub2026`, dados só no navegador).
+
+## Segurança
+A `anon key` do `config.js` é pública por design — a proteção vem do RLS criado no `schema.sql`
+(cada login só acessa os próprios dados). Nunca exponha a *service_role* key.
