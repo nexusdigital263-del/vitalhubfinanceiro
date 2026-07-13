@@ -42,7 +42,7 @@ const TABELAS = {
 const APP_2_DB = { saldoInicial: "saldo_inicial", categoriaId: "categoria_id", contaId: "conta_id", proximaData: "proxima_data", ultimoAcesso: "ultimo_acesso", valorMensal: "valor_mensal", diaVenc: "dia_venc" };
 const DB_2_APP = Object.fromEntries(Object.entries(APP_2_DB).map(([a, b]) => [b, a]));
 const conv = (obj, dict) => { const o = {}; for (const k in obj) o[dict[k] || k] = obj[k]; return o; };
-const paraBanco = (r) => conv(r, APP_2_DB);   // mantém o id (texto)
+const paraBanco = (r) => { const o = conv(r, APP_2_DB); delete o.obs; return o; };   // mantém o id (texto); 'obs' não existe no banco
 const paraApp   = (l) => conv(l, DB_2_APP);
 
 /* ----------------------- LEITURA ----------------------- */
