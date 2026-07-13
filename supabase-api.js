@@ -34,10 +34,8 @@ export async function sessaoAtual() {
 
 /* ----------------- MAPEAMENTO APP <-> BANCO ----------------- */
 // A ORDEM importa na leitura/escrita por causa das chaves estrangeiras.
-// OBS: 'usuarios' NÃO entra aqui — a lista de usuários do app é local; o
-// controle de acesso real é o Authentication do Supabase.
 const TABELAS = {
-  contas: "contas", categorias: "categorias",
+  contas: "contas", categorias: "categorias", usuarios: "usuarios",
   lancamentos: "lancamentos", contasPR: "contas_pr",
   recorrentes: "recorrentes", transferencias: "transferencias",
 };
@@ -90,7 +88,7 @@ export async function salvarVarios(appKey, registros) {
 // Grava os dados de exemplo respeitando a ordem das chaves estrangeiras.
 // Resiliente: se uma tabela falhar (ex.: ausente no schema), segue as demais.
 export async function semear(dados) {
-  const ordem = ["contas", "categorias", "lancamentos", "contasPR", "recorrentes", "transferencias"];
+  const ordem = ["contas", "categorias", "usuarios", "lancamentos", "contasPR", "recorrentes", "transferencias"];
   const erros = [];
   for (const appKey of ordem) {
     if (dados[appKey] && dados[appKey].length) {
