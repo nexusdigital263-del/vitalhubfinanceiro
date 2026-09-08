@@ -38,8 +38,9 @@ const TABELAS = {
   contas: "contas", categorias: "categorias", usuarios: "usuarios",
   lancamentos: "lancamentos", contasPR: "contas_pr",
   recorrentes: "recorrentes", transferencias: "transferencias", clientes: "clientes",
+  fechamentos: "fechamentos", auditoria: "auditoria",
 };
-const APP_2_DB = { saldoInicial: "saldo_inicial", categoriaId: "categoria_id", contaId: "conta_id", proximaData: "proxima_data", ultimoAcesso: "ultimo_acesso", valorMensal: "valor_mensal", diaVenc: "dia_venc" };
+const APP_2_DB = { saldoInicial: "saldo_inicial", categoriaId: "categoria_id", contaId: "conta_id", proximaData: "proxima_data", ultimoAcesso: "ultimo_acesso", valorMensal: "valor_mensal", diaVenc: "dia_venc", clienteNome: "cliente_nome" };
 const DB_2_APP = Object.fromEntries(Object.entries(APP_2_DB).map(([a, b]) => [b, a]));
 const conv = (obj, dict) => { const o = {}; for (const k in obj) o[dict[k] || k] = obj[k]; return o; };
 const paraBanco = (r) => { const o = conv(r, APP_2_DB); delete o.obs; return o; };   // mantém o id (texto); 'obs' não existe no banco
@@ -103,6 +104,34 @@ export async function semear(dados) {
 export async function excluir(appKey, ids) {
   const lista = Array.isArray(ids) ? ids : [ids];
   const { error } = await supabase.from(TABELAS[appKey]).delete().in("id", lista);
+  if (error) throw error;
+  return true;
+}
+
+/* -------- configurações / metas / provisões (chave-valor em JSON) -------- */
+export async function lerConfigs() {
+  try {
+    const { data, error } = await supabase.from("app_config").select("chave, valor");
+    if (error) throw error;
+    const out = {};
+    (data || []).forEach((r) => { out[r.chave] = r.valor; });
+    return out;
+  } catch (e) { return {}; }
+}
+export async function salvarConfig(chave, valor) {
+  const { error } = await supabase.from("app_config").upsert({ chave, valor, atualizado_em: new Date().toISOString() });
+  if (error) throw error;
+  return true;
+}
+
+/* -------- fechamento mensal -------- */
+export async function fecharMes(mes, quem) {
+  const { error } = await supabase.from("fechamentos").upsert({ mes, quem });
+  if (error) throw error;
+  return true;
+}
+export async function reabrirMes(mes) {
+  const { error } = await supabase.from("fechamentos").delete().eq("mes", mes);
   if (error) throw error;
   return true;
 }
