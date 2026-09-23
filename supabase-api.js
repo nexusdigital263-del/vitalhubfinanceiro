@@ -72,18 +72,41 @@ export async function bancoVazio() {
 }
 
 /* ----------------------- ESCRITA ----------------------- */
-// Cria OU atualiza (upsert pelo id). Não usa .single() para evitar o erro de
-// "0 rows" que o RLS pode causar no retorno; devolve o próprio registro.
+// Colunas que o banco ainda não tem (descobertas em tempo de execução).
+// Assim um campo novo no app nunca impede o salvamento: ele é descartado
+// até você rodar o SQL que cria a coluna.
+const colunasAusentes = {};
+const limpar = (tabela, obj) => {
+  const aus = colunasAusentes[tabela] || {};
+  const o = {};
+  for (const k in obj) if (!aus[k]) o[k] = obj[k];
+  return o;
+};
+const colunaFaltando = (error) => {
+  const m = /Could not find the '([^']+)' column/i.exec((error && error.message) || "");
+  return m ? m[1] : null;
+};
+async function upsertTolerante(tabela, linhas) {
+  for (let tentativa = 0; tentativa < 8; tentativa++) {
+    const payload = linhas.map((l) => limpar(tabela, l));
+    const { error } = await supabase.from(tabela).upsert(payload.length === 1 ? payload[0] : payload);
+    if (!error) return;
+    const col = colunaFaltando(error);
+    if (!col) throw error;
+    colunasAusentes[tabela] = Object.assign({}, colunasAusentes[tabela], { [col]: true });
+    console.warn("[VitalHub] coluna ausente no banco, ignorando:", tabela + "." + col);
+  }
+}
+
+// Cria OU atualiza (upsert pelo id). Devolve o próprio registro.
 export async function salvar(appKey, registro) {
-  const { error } = await supabase.from(TABELAS[appKey]).upsert(paraBanco(registro));
-  if (error) throw error;
+  await upsertTolerante(TABELAS[appKey], [paraBanco(registro)]);
   return registro;
 }
 // Upsert em lote (usado na carga inicial de exemplos).
 export async function salvarVarios(appKey, registros) {
   if (!registros || !registros.length) return [];
-  const { error } = await supabase.from(TABELAS[appKey]).upsert(registros.map(paraBanco));
-  if (error) throw error;
+  await upsertTolerante(TABELAS[appKey], registros.map(paraBanco));
   return registros;
 }
 // Grava os dados de exemplo respeitando a ordem das chaves estrangeiras.
